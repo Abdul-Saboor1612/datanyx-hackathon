@@ -17,3 +17,6 @@ ENV/
 
 # FastAPI logs
 *.log
+
+.env
+src/.env
