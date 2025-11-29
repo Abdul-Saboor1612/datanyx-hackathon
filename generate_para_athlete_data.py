@@ -169,11 +169,16 @@ def generate_para_athlete_data(n_samples: int = 1500, random_state: int = 42) ->
 
     # ---- 9. Build DataFrame ----
     data = {
+<<<<<<< HEAD
+=======
+        "athlete_id": athlete_id,
+>>>>>>> 352d82e8aa4f6d9858f92db574248ab7d66943bc
         "age": age,
         "gender": gender,
         "disability_type": disability_type,
         "sport_type": sport_type,
 
+<<<<<<< HEAD
         "training_days_per_week": training_days_per_week,
 
         "sleep_hours": sleep_hours,
@@ -182,10 +187,35 @@ def generate_para_athlete_data(n_samples: int = 1500, random_state: int = 42) ->
 
         "daily_calorie_intake": daily_calorie_intake,
         "protein_intake_g": protein_intake_g,
+=======
+        "training_hours_per_day": training_hours_per_day,
+        "training_days_per_week": training_days_per_week,
+        "weekly_training_load": weekly_training_load,
+        "rpe_score": rpe_score,
+
+        "sleep_hours": sleep_hours,
+        "sleep_quality_score": sleep_quality_score,
+
+        "heart_rate_rest": heart_rate_rest,
+        "heart_rate_avg": heart_rate_avg,
+        "heart_rate_max": heart_rate_max,
+
+        "daily_calorie_intake": daily_calorie_intake,
+        "protein_intake_g": protein_intake_g,
+        "carbohydrate_intake_g": carbohydrate_intake_g,
+        "fat_intake_g": fat_intake_g,
+>>>>>>> 352d82e8aa4f6d9858f92db574248ab7d66943bc
         "water_intake_liters": water_intake_liters,
         "hydration_level": hydration_level,
 
         "fatigue_level": fatigue_level,
+<<<<<<< HEAD
+=======
+        "muscle_soreness_level": muscle_soreness_level,
+        "mood_score": mood_score,
+        "motivation_level": motivation_level,
+        "stress_level": stress_level,
+>>>>>>> 352d82e8aa4f6d9858f92db574248ab7d66943bc
 
         "stamina_level": stamina_level,          # 🔥 model target candidate
         "performance_score": performance_score,  # 🔥 model target candidate
@@ -204,4 +234,8 @@ if __name__ == "__main__":
     print("\nShape:", df_para.shape)
 
     df_para.to_csv("para_athlete_synthetic_data.csv", index=False)
+<<<<<<< HEAD
     print("\nSaved to para_athlete_synthetic_data.csv")
+=======
+    print("\nSaved to para_athlete_synthetic_data.csv")
+>>>>>>> 352d82e8aa4f6d9858f92db574248ab7d66943bc
