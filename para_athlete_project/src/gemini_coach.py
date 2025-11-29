@@ -1,15 +1,23 @@
+import re
+import difflib
 import requests
-from google import genai
+import google.generativeai as genai
+from PIL import Image
+import io
+import os
 
 # ==========================
 #  CONFIG
 # ==========================
 
 API_URL = "http://127.0.0.1:8000/predict"  # FastAPI endpoint
-GEMINI_API_KEY = "YOUR_API_KEY"       # 🔴 replace with your key
+GEMINI_API_KEY = "AIzaSyBQCAcMNBuDXIUZdXhHKSUn3fG7cWobEyQ"  # Your API key
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# Configure the API
+genai.configure(api_key=GEMINI_API_KEY)
 
+# Initialize the model
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 # ==========================
 #  Helper: call FastAPI
@@ -41,14 +49,36 @@ def ask_float(prompt):
             print("❌ Please enter a valid number.")
 
 
+def _similar(a, b):
+    """Calculate similarity ratio between two strings (0-1)"""
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+
 def ask_choice(prompt, choices):
+    choices_lower = [c.lower() for c in choices]
     choices_str = "/".join(choices)
+    
     while True:
         val = input(f"{prompt} ({choices_str}): ").strip()
-        # make it a bit forgiving for case
-        for c in choices:
-            if val.lower() == c.lower():
-                return c
+        
+        # Remove extra spaces and normalize case
+        val = re.sub(r'\s+', ' ', val).strip().lower()
+        
+        # Check for direct match
+        if val in choices_lower:
+            return choices[choices_lower.index(val)]
+            
+        # Check for partial matches (e.g., 'vis' matches 'Visual Impairment')
+        matches = [c for c in choices if val in c.lower()]
+        if len(matches) == 1:
+            return matches[0]
+            
+        # Check for similar words with small typos
+        for choice in choices:
+            # If input is at least 3 characters and similar to a choice
+            if len(val) > 2 and _similar(val, choice.lower()) > 0.7:
+                return choice
+                
         print(f"❌ Please choose one of: {choices_str}")
 
 
@@ -56,8 +86,58 @@ def ask_choice(prompt, choices):
 #  Main CLI
 # ==========================
 
+def analyze_injury(image, athlete_data):
+    """Analyze injury image using Gemini Vision"""
+    # Convert image to bytes
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format=image.format)
+    img_byte_arr = img_byte_arr.getvalue()
+    
+    prompt = f"""
+    You are a sports medicine specialist. Analyze this injury image for a para-athlete.
+    
+    Athlete details:
+    - Age: {athlete_data.get('age')}
+    - Gender: {athlete_data.get('gender')}
+    - Disability: {athlete_data.get('disability_type')}
+    - Sport: {athlete_data.get('sport_type')}
+    
+    Please provide:
+    1. Description of visible injury
+    2. Severity assessment (mild/moderate/severe)
+    3. Recommended immediate actions
+    4. Whether medical attention is advised
+    """
+    
+    response = model.generate_content([prompt, img_byte_arr])
+    return response.text
+
+def ask_for_image(prompt):
+    """Prompt user to upload an image and validate it"""
+    while True:
+        try:
+            image_path = input(f"\n{prompt} (or press Enter to skip): ").strip()
+            if not image_path:  # User pressed Enter
+                return None
+                
+            if not os.path.exists(image_path):
+                print("❌ File not found. Please enter a valid file path.")
+                continue
+                
+            try:
+                img = Image.open(image_path)
+                return img
+            except Exception as e:
+                print(f"❌ Error loading image: {e}")
+                continue
+                
+        except KeyboardInterrupt:
+            print("\nOperation cancelled.")
+            return None
+
 def main():
-    print("=== Para-Athlete Gemini Coach CLI ===\n")
+    print("=== Para-Athlete Gemini Coach ===\n")
+    print("📷 You can upload injury photos for analysis when prompted.\n")
 
     gender_choices = ["Male", "Female", "Other"]
     disability_choices = [
@@ -146,13 +226,19 @@ User question:
 
     print("🤖 Asking Gemini to act as a coach...\n")
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            system_prompt,
-            model_input
-        ]
-    )
+    # Check if user wants to upload an injury image
+    injury_img = ask_for_image("Would you like to upload an injury photo for analysis?")
+    
+    if injury_img:
+        print("\n🔍 Analyzing injury image...")
+        injury_analysis = analyze_injury(injury_img, athlete_input)
+        model_input += f"\n\nInjury Analysis:\n{injury_analysis}"
+    
+    # Combine system prompt and user input into a single message
+    full_prompt = f"{system_prompt}\n\n{model_input}"
+    
+    # Generate response
+    response = model.generate_content(full_prompt)
 
     print("===== GEMINI COACH RESPONSE =====\n")
     print(response.text)
