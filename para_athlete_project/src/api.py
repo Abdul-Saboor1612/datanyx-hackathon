@@ -33,6 +33,10 @@ class ParaAthleteInput(BaseModel):
         "Para Archery",
     ]
 
+    # ✅ New: body size info for nutrition logic
+    weight_kg: float = Field(..., ge=30.0, le=150.0)
+    height_cm: float = Field(..., ge=120.0, le=210.0)
+
     training_days_per_week: int = Field(..., ge=1, le=7)
     sleep_hours: float = Field(..., ge=0.0, le=12.0)
 
@@ -40,7 +44,9 @@ class ParaAthleteInput(BaseModel):
     daily_calorie_intake: int = Field(..., ge=800, le=6000)
     protein_intake_g: float = Field(..., ge=0.0, le=400.0)
     water_intake_liters: float = Field(..., ge=0.0, le=10.0)
-    hydration_level: int = Field(..., ge=0, le=100)
+
+    # Optional: we default this now
+    hydration_level: int = Field(70, ge=0, le=100)
 
 
 # ------------------------------------------
@@ -61,9 +67,7 @@ def predict(input_data: ParaAthleteInput):
     Predict stamina_level, fatigue_level, and injury_risk_score
     for a para-athlete profile.
     """
-
     features = input_data.dict()
-
     preds = predict_para_athlete(features)
 
     return {

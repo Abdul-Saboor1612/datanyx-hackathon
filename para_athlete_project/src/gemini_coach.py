@@ -3,17 +3,15 @@ import re
 import difflib
 import requests
 from google import genai
-
 from dotenv import load_dotenv
 
-# Load .env from current folder
-load_dotenv()
-
 # ==========================
-#  CONFIG
+#  Load .env + config
 # ==========================
 
-API_URL = "http://127.0.0.1:8000/predict"  # FastAPI endpoint
+load_dotenv()  # expects GEMINI_API_KEY in .env
+
+API_URL = "http://127.0.0.1:8000/predict"
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
@@ -36,10 +34,10 @@ def call_para_api(payload: dict) -> dict:
 
 
 # ==========================
-#  Small helpers
+#  CLI input helpers
 # ==========================
 
-def ask_int(prompt):
+def ask_int(prompt: str) -> int:
     while True:
         try:
             return int(input(prompt))
@@ -47,7 +45,7 @@ def ask_int(prompt):
             print("❌ Please enter a valid integer.")
 
 
-def ask_float(prompt):
+def ask_float(prompt: str) -> float:
     while True:
         try:
             return float(input(prompt))
@@ -55,28 +53,34 @@ def ask_float(prompt):
             print("❌ Please enter a valid number.")
 
 
+def ask_int_in_range(prompt: str, min_value: int, max_value: int) -> int:
+    """Ask for an integer and ensure it's within a valid range."""
+    while True:
+        value = ask_int(f"{prompt} ({min_value}–{max_value}): ")
+        if min_value <= value <= max_value:
+            return value
+        print(f"❌ Please enter a value between {min_value} and {max_value}.")
+
+
+def ask_float_in_range(prompt: str, min_value: float, max_value: float) -> float:
+    """Ask for a float and ensure it's within a valid range."""
+    while True:
+        value = ask_float(f"{prompt} ({min_value}–{max_value}): ")
+        if min_value <= value <= max_value:
+            return value
+        print(f"❌ Please enter a value between {min_value} and {max_value}.")
+
+
 def _normalize(s: str) -> str:
-    """
-    Normalize a string for fuzzy matching:
-    - lowercase
-    - remove non-letters/spaces
-    - collapse multiple spaces
-    """
     s = s.lower()
-    s = re.sub(r"[^a-z\s]", "", s)  # keep only letters + spaces
+    s = re.sub(r"[^a-z\s]", "", s)
     s = re.sub(r"\s+", " ", s).strip()
     return s
 
 
 def ask_choice(prompt, choices):
-    """
-    Ask user to choose from a list of choices, but:
-    - ignore case
-    - handle small typos using fuzzy matching
-    """
     choices_str = "/".join(choices)
-    # Precompute normalized versions of each choice
-    normalized_map = { _normalize(c): c for c in choices }
+    normalized_map = {_normalize(c): c for c in choices}
     normalized_choices = list(normalized_map.keys())
 
     while True:
@@ -87,12 +91,12 @@ def ask_choice(prompt, choices):
 
         norm_val = _normalize(val)
 
-        # 1) Exact case-insensitive match
+        # exact-ish
         for c in choices:
             if norm_val == _normalize(c):
                 return c
 
-        # 2) Fuzzy match using difflib
+        # fuzzy
         close = difflib.get_close_matches(norm_val, normalized_choices, n=1, cutoff=0.6)
         if close:
             best_norm = close[0]
@@ -105,7 +109,7 @@ def ask_choice(prompt, choices):
 
 
 # ==========================
-#  Main CLI
+#  Main CLI with chat loop
 # ==========================
 
 def main():
@@ -129,32 +133,40 @@ def main():
 
     # 1) Collect athlete data
     print("Enter athlete details:\n")
-    age = ask_int("Age (years): ")
+    age = ask_int_in_range("Age (years)", 12, 70)
     gender = ask_choice("Gender", gender_choices)
     disability_type = ask_choice("Disability type", disability_choices)
     sport_type = ask_choice("Sport type", sport_choices)
 
-    training_days_per_week = ask_int("Training days per week (1–7): ")
-    sleep_hours = ask_float("Average sleep hours per night: ")
+    weight_kg = ask_float_in_range("Weight (kg)", 30.0, 150.0)
+    height_cm = ask_float_in_range("Height (cm)", 120.0, 210.0)
 
-    heart_rate_rest = ask_int("Resting heart rate (bpm): ")
-    daily_calorie_intake = ask_int("Daily calorie intake (kcal): ")
-    protein_intake_g = ask_float("Daily protein intake (grams): ")
-    water_intake_liters = ask_float("Daily water intake (liters): ")
-    hydration_level = ask_int("Hydration level (0–100): ")
+    training_days_per_week = ask_int_in_range("Training days per week", 1, 7)
+    sleep_hours = ask_float_in_range("Average sleep hours per night", 0.0, 12.0)
+
+    heart_rate_rest = ask_int_in_range("Resting heart rate (bpm)", 30, 120)
+    daily_calorie_intake = ask_int_in_range("Daily calorie intake (kcal)", 800, 6000)
+    protein_intake_g = ask_float_in_range("Daily protein intake (grams)", 0.0, 400.0)
+    water_intake_liters = ask_float_in_range("Daily water intake (liters)", 0.0, 10.0)
+
+    # simple BMI for Gemini context (not used by ML)
+    height_m = height_cm / 100.0 if height_cm > 0 else 0
+    bmi = round(weight_kg / (height_m ** 2), 1) if height_m > 0 else None
 
     athlete_input = {
         "age": age,
         "gender": gender,
         "disability_type": disability_type,
         "sport_type": sport_type,
+        "weight_kg": weight_kg,
+        "height_cm": height_cm,
         "training_days_per_week": training_days_per_week,
         "sleep_hours": sleep_hours,
         "heart_rate_rest": heart_rate_rest,
         "daily_calorie_intake": daily_calorie_intake,
         "protein_intake_g": protein_intake_g,
         "water_intake_liters": water_intake_liters,
-        "hydration_level": hydration_level,
+        # hydration_level omitted → API default (70) will be used
     }
 
     print("\n📡 Calling ML API for predictions...")
@@ -162,53 +174,101 @@ def main():
     preds = api_result["predictions"]
     print("✅ Got predictions from backend.\n")
 
-    # Optional: let user ask something
-    user_question = input(
-        "What do you want to ask the coach? (e.g., 'How is my fitness and risk?')\n> "
-    )
-    if not user_question.strip():
-        user_question = "Give me an overview of my fitness, fatigue and injury risk and how to improve."
+    conversation_history = ""
 
-    # 2) Build prompts for Gemini
+    # SYSTEM PROMPT: sport-specific, personalized diet plan
     system_prompt = """
-You are a para-athlete performance coach AI.
+You are a para-athlete performance and nutrition coach AI.
 
-You get:
-1) The athlete's profile and training data.
-2) Model predictions: stamina_level (0–100), fatigue_level (0–10),
-   injury_risk_score (0–1), injury_risk_label.
+Inputs you receive:
+- athlete_profile: age, gender, disability_type, sport_type, weight_kg, height_cm,
+  training_days_per_week, sleep_hours.
+- nutrition: daily_calorie_intake, protein_intake_g, water_intake_liters.
+- derived_metrics: BMI (approx).
+- model predictions: stamina_level (0–100), fatigue_level (0–10),
+  injury_risk_score (0–1), injury_risk_label.
 
-TASK:
-- Explain in simple language how their stamina, fatigue, and injury risk look.
-- Mention specific numbers briefly but focus more on interpretation.
-- Give 3–5 practical suggestions (training, sleep, hydration, nutrition).
-- Be supportive, encouraging, and not alarming.
+Rules:
+- ALWAYS base your answers on the given athlete_profile, sport_type, and predictions.
+- If asked about tournament chances, do NOT say you can't answer.
+  Instead, explain their current readiness, strengths, and gaps, and what to improve.
+- For nutrition:
+  - Suggest a realistic daily calorie RANGE based on sport_type, weight_kg, height_cm
+    and training_days_per_week.
+  - State clearly if current intake is below / within / above that range.
+  - Always give a personalized diet plan tailored to their sport:
+      * Endurance (Wheelchair Racing, Para Swimming, Para Athletics): higher carbs.
+      * Strength/power (Para Powerlifting): higher protein and adequate carbs.
+      * Precision / stability (Para Archery): balanced energy, steady blood sugar.
+- Provide a simple SAMPLE DAY MEAL PLAN with meal names (Breakfast, Lunch, Snack, Dinner)
+  and example foods with approximate ideas (not exact grams).
+
+RESPONSE FORMAT (STRICT):
+
+SUMMARY (max 3 bullets):
+- ...
+
+CALORIES & DIET (max 3 bullets):
+- ...
+
+SAMPLE DAY MEAL PLAN (max 6 bullets):
+- Breakfast: ...
+- Mid-morning snack: ...
+- Lunch: ...
+- Pre-training snack: ...
+- Post-training: ...
+- Dinner: ...
+
+ACTIONS (TRAINING + RECOVERY) (max 4 bullets):
+- ...
+
+Do NOT add any other sections, disclaimers or long paragraphs.
 """
 
-    model_input = f"""
+    print("You can now chat with the coach. Type 'exit' to stop.\n")
+
+    while True:
+        user_question = input("You: ").strip()
+        if user_question.lower() in ("exit", "quit", "q"):
+            print("👋 Ending chat. Take care!")
+            break
+
+        if not user_question:
+            user_question = "Give me an overview of my fitness, risk and what diet I should follow."
+
+        conversation_text = f"""
 Athlete data:
 {athlete_input}
+
+Derived metrics:
+BMI: {bmi}
 
 Model predictions:
 {preds}
 
-User question:
+Previous conversation:
+{conversation_history}
+
+Current user question:
 {user_question}
 """
 
-    print("🤖 Asking Gemini to act as a coach...\n")
+        print("\n🤖 Coach is thinking...\n")
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            system_prompt,
-            model_input
-        ]
-    )
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=[
+                system_prompt,
+                conversation_text,
+            ],
+        )
 
-    print("===== GEMINI COACH RESPONSE =====\n")
-    print(response.text)
-    print("\n=================================\n")
+        coach_reply = response.text.strip()
+        print("===== GEMINI COACH (FILTERED) =====\n")
+        print(coach_reply)
+        print("\n===================================\n")
+
+        conversation_history += f"\nUser: {user_question}\nCoach: {coach_reply}\n"
 
 
 if __name__ == "__main__":
