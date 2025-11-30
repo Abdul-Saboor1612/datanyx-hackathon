@@ -6,3 +6,4 @@ fastapi
 uvicorn
 requests
 google-genai
+python-dotenv
